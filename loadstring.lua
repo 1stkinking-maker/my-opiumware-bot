@@ -1,0 +1,1 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/1stkinking-maker/my-opiumware-bot/refs/heads/main/github.lua"))()

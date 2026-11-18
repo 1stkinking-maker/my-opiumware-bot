@@ -1,13 +1,13 @@
--- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V5 HOVER ENGINE ]] --
+-- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V6 CUSTOM THRESHOLD ]] --
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local TweenService = game:GetService("TweenService")
 local vim = game:GetService("VirtualInputManager")
 
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Ken V5",
-   LoadingTitle = "Loading V5 Hover Engine...",
-   LoadingSubtitle = "Anti-Gravity & Accurate Dodge Count",
+   Name = "Auto Ken V6",
+   LoadingTitle = "Loading V6 Custom Threshold...",
+   LoadingSubtitle = "Perfect Loop",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
 })
@@ -24,7 +24,6 @@ local Toggle = MainTab:CreateToggle({
        getgenv().AutoKen = Value
        if not Value then 
            StatusLabel:Set("Status: Idle") 
-           -- Clean up hover when turned off
            local char = game.Players.LocalPlayer.Character
            if char and char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart:FindFirstChild("HoverBP") then
                char.HumanoidRootPart.HoverBP:Destroy()
@@ -33,15 +32,16 @@ local Toggle = MainTab:CreateToggle({
    end,
 })
 
-local MaxDodgesSlider = MainTab:CreateSlider({
-   Name = "Max Dodges (For 50% Calc)",
-   Range = { 4, 10 },
+-- Slider now goes from 1 to 12, letting you choose exactly how many dodges to wait for
+local DodgeThresholdSlider = MainTab:CreateSlider({
+   Name = "Dodges Needed to Dive",
+   Range = { 1, 12 },
    Increment = 1,
    Suffix = "Dodges",
-   CurrentValue = 6,
-   Flag = "MaxDodges",
+   CurrentValue = 3, -- Default to 3 (which is 50% of 6)
+   Flag = "DodgeThreshold",
    Callback = function(Value)
-       getgenv().MaxDodges = Value
+       getgenv().DodgeThreshold = Value
    end,
 })
 
@@ -57,7 +57,7 @@ local HeightSlider = MainTab:CreateSlider({
    end,
 })
 
--- Reliable Dodge Counter (Counts physical dodge instances)
+-- Accurately count physical dodge instances
 local function getDodgeCount()
     local char = game.Players.LocalPlayer.Character
     if not char then return 0 end
@@ -98,7 +98,7 @@ local function getNearestNPC()
     return nearest
 end
 
--- Hover Engine (Holds you perfectly still in the air)
+-- Anti-Gravity Hover Anchor
 local function hoverAt(pos)
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
@@ -121,11 +121,11 @@ local function stopHovering()
     end
 end
 
--- Smooth Glide to NPC
+-- Smooth Glide
 local function glideTo(targetPos, duration)
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
-    stopHovering() -- Remove hover so we can move
+    stopHovering()
     
     local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
     tween:Play()
@@ -148,8 +148,7 @@ task.spawn(function()
         local hrp = char.HumanoidRootPart
         
         local dodges = getDodgeCount()
-        local maxDodges = getgenv().MaxDodges or 6
-        local halfDodges = math.max(1, math.floor(maxDodges / 2))
+        local waitThreshold = getgenv().DodgeThreshold or 3
         local flyHeight = getgenv().FlyHeight or 60
         
         if state == "FIND_NPC" then
@@ -177,11 +176,12 @@ task.spawn(function()
                 vim:SendKeyEvent(false, "Space", false, game)
                 task.wait(0.1)
             else
-                StatusLabel:Set("Status: Out of dodges. Flying UP!")
+                StatusLabel:Set("Status: Out of dodges. Flying to Safe Zone!")
                 hoverPos = hrp.Position + Vector3.new(0, flyHeight, 0)
                 stopHovering()
-                -- Tween quickly up to the safe zone
-                local tween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(hoverPos)})
+                
+                -- Quickly fly straight up
+                local tween = TweenService:Create(hrp, TweenInfo.new(0.4, Enum.EasingStyle.Linear), {CFrame = CFrame.new(hoverPos)})
                 tween:Play()
                 tween.Completed:Wait()
                 
@@ -189,13 +189,15 @@ task.spawn(function()
             end
             
         elseif state == "HOVER" then
-            StatusLabel:Set("Status: Hovering safely. Dodges: "..dodges.."/"..halfDodges.." needed.")
+            -- Lock in place in the sky
             if hoverPos then
-                hoverAt(hoverPos) -- Anti-gravity engine
+                hoverAt(hoverPos) 
             end
             
-            if dodges >= halfDodges then
-                StatusLabel:Set("Status: Dodges refilled! Diving back in...")
+            StatusLabel:Set("Status: Safe in sky. Waiting for "..waitThreshold.." dodges. (Current: "..dodges..")")
+            
+            if dodges >= waitThreshold then
+                StatusLabel:Set("Status: Dodges ready! Diving back in...")
                 stopHovering()
                 state = "FIND_NPC"
             end
