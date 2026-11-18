@@ -1,12 +1,12 @@
--- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V10 IMMEDIATE FLIGHT ]] --
+-- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V11 ROBUST FLIGHT ]] --
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local vim = game:GetService("VirtualInputManager")
 
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Ken V10",
-   LoadingTitle = "Loading V10...",
-   LoadingSubtitle = "Immediate Flight & Anti-Flip",
+   Name = "Auto Ken V11",
+   LoadingTitle = "Loading V11 Robust Flight...",
+   LoadingSubtitle = "No Stuck, No Flips",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
 })
@@ -99,7 +99,7 @@ local function getNearestNPC()
     return nearest
 end
 
--- Clean up movement functions
+-- Clean up all movement
 local function clearMovement()
     local char = game.Players.LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
@@ -110,8 +110,8 @@ local function clearMovement()
     end
 end
 
--- Initialize the flight engine (BodyVelocity + BodyGyro)
-local function startFlightEngine()
+-- Robust Fly Function (with timeouts so you never get stuck)
+local function flyTo(targetPos, speed, timeLimit)
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
     clearMovement()
@@ -119,10 +119,8 @@ local function startFlightEngine()
     local bv = Instance.new("BodyVelocity")
     bv.Name = "FlyBV"
     bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.new(0, 0, 0)
     bv.Parent = hrp
     
-    -- Anti-flip BodyGyro
     local gyro = Instance.new("BodyGyro")
     gyro.Name = "FlyGyro"
     gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
@@ -130,48 +128,19 @@ local function startFlightEngine()
     gyro.D = 500
     gyro.CFrame = hrp.CFrame
     gyro.Parent = hrp
-end
-
--- Fly horizontally to the NPC
-local function flyToNPC(targetPos)
-    startFlightEngine()
-    local char = game.Players.LocalPlayer.Character
-    local hrp = char.HumanoidRootPart
-    local bv = hrp:FindFirstChild("FlyBV")
+    
+    local startTime = tick()
     
     while getgenv().AutoKen do
         if not hrp or not hrp.Parent then break end
-        local dist = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
-        if dist < 5 then break end
+        if tick() - startTime > timeLimit then break end -- Timeout to prevent freezing
         
-        local dir = (Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z) - hrp.Position).Unit
-        bv.Velocity = dir * 50
+        local dist = (targetPos - hrp.Position).Magnitude
+        if dist < 5 then break end -- Reached destination
+        
+        bv.Velocity = (targetPos - hrp.Position).Unit * speed
         task.wait(0.1)
     end
-    if bv then bv.Velocity = Vector3.new(0, 0, 0) end
-    clearMovement() -- Clear movement so normal physics take over when fighting
-end
-
--- Fly straight UP smoothly
-local function flyUp(targetY)
-    startFlightEngine()
-    local char = game.Players.LocalPlayer.Character
-    local hrp = char.HumanoidRootPart
-    local bv = hrp:FindFirstChild("FlyBV")
-    
-    bv.Velocity = Vector3.new(0, 60, 0) -- Smooth upward flight speed
-    
-    while getgenv().AutoKen and hrp.Position.Y < targetY do
-        task.wait(0.1)
-    end
-    bv.Velocity = Vector3.new(0, 0, 0)
-    
-    -- Lock in place in the sky (Anti-gravity)
-    local bp = Instance.new("BodyPosition")
-    bp.Name = "HoverBP"
-    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bp.Position = Vector3.new(hrp.Position.X, targetY, hrp.Position.Z)
-    bp.Parent = hrp
 end
 
 -- STATE MACHINE
@@ -197,12 +166,14 @@ task.spawn(function()
             if npc then
                 StatusLabel:Set("Status: Flying to NPC...")
                 local targetPos = npc.HumanoidRootPart.Position + Vector3.new(0, 1, 0)
-                flyToNPC(targetPos)
+                flyTo(targetPos, 50, 2) -- Fly for max 2 seconds
+                clearMovement() -- Hand control back to the game so you can get hit
                 if getgenv().AutoKen then
                     state = "FIGHT"
                 end
             else
                 StatusLabel:Set("Status: No NPCs found nearby.")
+                clearMovement()
                 task.wait(1)
             end
             
@@ -214,7 +185,6 @@ task.spawn(function()
                 vim:SendKeyEvent(false, "E", false, game)
                 task.wait(0.3)
                 
-                -- Spam space until dodges hit 0
                 while getDodgeCount() > 0 and getgenv().AutoKen do
                     vim:SendKeyEvent(true, "Space", false, game)
                     task.wait(0.05)
@@ -230,8 +200,17 @@ task.spawn(function()
             
         elseif state == "FLY_UP" then
             StatusLabel:Set("Status: Out of dodges! Flying UP smoothly!")
-            local targetY = hrp.Position.Y + flyHeight
-            flyUp(targetY)
+            local targetPos = Vector3.new(hrp.Position.X, hrp.Position.Y + flyHeight, hrp.Position.Z)
+            flyTo(targetPos, 60, 3) -- Fly up for max 3 seconds
+            
+            -- Lock in place in the sky
+            clearMovement()
+            local bp = Instance.new("BodyPosition")
+            bp.Name = "HoverBP"
+            bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bp.Position = hrp.Position
+            bp.Parent = hrp
+            
             if getgenv().AutoKen then
                 state = "HOVER"
             end
