@@ -1,12 +1,12 @@
--- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V11 ROBUST FLIGHT ]] --
+-- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V12 FIXED STATE MACHINE ]] --
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local vim = game:GetService("VirtualInputManager")
 
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Ken V11",
-   LoadingTitle = "Loading V11 Robust Flight...",
-   LoadingSubtitle = "No Stuck, No Flips",
+   Name = "Auto Ken V12",
+   LoadingTitle = "Loading V12...",
+   LoadingSubtitle = "Fixed Loops & Anti-Freeze",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
 })
@@ -28,7 +28,7 @@ local Toggle = MainTab:CreateToggle({
                local hrp = char.HumanoidRootPart
                if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
                if hrp:FindFirstChild("HoverBP") then hrp.HoverBP:Destroy() end
-               if hrp:FindFirstChild("FlyGyro") then hrp.FlyGyro:Destroy() end
+               if hrp:FindFirstChild("FlyAlign") then hrp.FlyAlign:Destroy() end
            end
        end
    end,
@@ -106,12 +106,12 @@ local function clearMovement()
         local hrp = char.HumanoidRootPart
         if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
         if hrp:FindFirstChild("HoverBP") then hrp.HoverBP:Destroy() end
-        if hrp:FindFirstChild("FlyGyro") then hrp.FlyGyro:Destroy() end
+        if hrp:FindFirstChild("FlyAlign") then hrp.FlyAlign:Destroy() end
     end
 end
 
--- Robust Fly Function (with timeouts so you never get stuck)
-local function flyTo(targetPos, speed, timeLimit)
+-- Smooth Flight Engine
+local function startFlight()
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
     clearMovement()
@@ -119,33 +119,25 @@ local function flyTo(targetPos, speed, timeLimit)
     local bv = Instance.new("BodyVelocity")
     bv.Name = "FlyBV"
     bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(0, 0, 0)
     bv.Parent = hrp
     
-    local gyro = Instance.new("BodyGyro")
-    gyro.Name = "FlyGyro"
-    gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    gyro.P = 9e4
-    gyro.D = 500
-    gyro.CFrame = hrp.CFrame
-    gyro.Parent = hrp
-    
-    local startTime = tick()
-    
-    while getgenv().AutoKen do
-        if not hrp or not hrp.Parent then break end
-        if tick() - startTime > timeLimit then break end -- Timeout to prevent freezing
-        
-        local dist = (targetPos - hrp.Position).Magnitude
-        if dist < 5 then break end -- Reached destination
-        
-        bv.Velocity = (targetPos - hrp.Position).Unit * speed
-        task.wait(0.1)
-    end
+    -- AlignOrientation prevents flipping perfectly
+    local align = Instance.new("AlignOrientation")
+    align.Name = "FlyAlign"
+    align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    align.MaxTorque = math.huge
+    align.Responsiveness = 200
+    local att = Instance.new("Attachment", hrp)
+    align.Attachment0 = att
+    align.Parent = hrp
+    att.Name = "FlyAtt"
 end
 
 -- STATE MACHINE
 task.spawn(function()
     local state = "FIND_NPC"
+    local dodgeTimer = 0
     
     while task.wait(0.1) do
         if not getgenv().AutoKen then
@@ -165,14 +157,24 @@ task.spawn(function()
             local npc = getNearestNPC()
             if npc then
                 StatusLabel:Set("Status: Flying to NPC...")
+                startFlight()
                 local targetPos = npc.HumanoidRootPart.Position + Vector3.new(0, 1, 0)
-                flyTo(targetPos, 50, 2) -- Fly for max 2 seconds
-                clearMovement() -- Hand control back to the game so you can get hit
-                if getgenv().AutoKen then
-                    state = "FIGHT"
+                
+                -- Fly for a maximum of 2 seconds to prevent getting stuck
+                local timePassed = 0
+                while timePassed < 2 do
+                    local dist = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
+                    if dist < 5 then break end
+                    hrp.FlyBV.Velocity = (Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z) - hrp.Position).Unit * 50
+                    task.wait(0.1)
+                    timePassed = timePassed + 0.1
                 end
+                
+                clearMovement() -- Stop flying so you can get hit
+                state = "FIGHT"
+                dodgeTimer = 0
             else
-                StatusLabel:Set("Status: No NPCs found nearby.")
+                StatusLabel:Set("Status: No NPCs found.")
                 clearMovement()
                 task.wait(1)
             end
@@ -180,28 +182,35 @@ task.spawn(function()
         elseif state == "FIGHT" then
             if dodges > 0 then
                 StatusLabel:Set("Status: Dodging! ("..dodges.." left)")
+                
+                -- Press E to activate Ken
                 vim:SendKeyEvent(true, "E", false, game)
                 task.wait(0.1)
                 vim:SendKeyEvent(false, "E", false, game)
-                task.wait(0.3)
                 
-                while getDodgeCount() > 0 and getgenv().AutoKen do
-                    vim:SendKeyEvent(true, "Space", false, game)
-                    task.wait(0.05)
-                    vim:SendKeyEvent(false, "Space", false, game)
-                    task.wait(0.1)
-                end
-            end
-            
-            -- Immediately fly up when dodges hit 0
-            if getDodgeCount() == 0 and getgenv().AutoKen then
+                -- Press Space to dodge (slower so the game registers it)
+                task.wait(0.2)
+                vim:SendKeyEvent(true, "Space", false, game)
+                task.wait(0.05)
+                vim:SendKeyEvent(false, "Space", false, game)
+                
+                task.wait(0.3) -- Wait before the next loop tick
+            else
+                -- Dodges are 0, go up immediately
                 state = "FLY_UP"
             end
             
         elseif state == "FLY_UP" then
-            StatusLabel:Set("Status: Out of dodges! Flying UP smoothly!")
-            local targetPos = Vector3.new(hrp.Position.X, hrp.Position.Y + flyHeight, hrp.Position.Z)
-            flyTo(targetPos, 60, 3) -- Fly up for max 3 seconds
+            StatusLabel:Set("Status: Out of dodges! Flying UP!")
+            startFlight()
+            local targetY = hrp.Position.Y + flyHeight
+            
+            local timePassed = 0
+            while hrp.Position.Y < targetY and timePassed < 3 do
+                hrp.FlyBV.Velocity = Vector3.new(0, 60, 0)
+                task.wait(0.1)
+                timePassed = timePassed + 0.1
+            end
             
             -- Lock in place in the sky
             clearMovement()
@@ -211,12 +220,10 @@ task.spawn(function()
             bp.Position = hrp.Position
             bp.Parent = hrp
             
-            if getgenv().AutoKen then
-                state = "HOVER"
-            end
+            state = "HOVER"
             
         elseif state == "HOVER" then
-            StatusLabel:Set("Status: Hovering safely. Dodges: "..dodges.."/"..waitThreshold.." needed.")
+            StatusLabel:Set("Status: Hovering. Dodges: "..dodges.."/"..waitThreshold)
             
             local bp = hrp:FindFirstChild("HoverBP")
             if bp then
@@ -224,7 +231,7 @@ task.spawn(function()
             end
             
             if dodges >= waitThreshold then
-                StatusLabel:Set("Status: Dodges refilled! Diving back in...")
+                StatusLabel:Set("Status: Dodges ready! Diving...")
                 clearMovement()
                 state = "FIND_NPC"
             end
