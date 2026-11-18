@@ -1,12 +1,12 @@
--- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V8 SMOOTH FLIGHT & DAMAGE TRIGGER ]] --
+-- [[ PROFESSIONAL BLOX FRUITS OBSERVATION MACRO - V9 TRUE FLIGHT ENGINE ]] --
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local vim = game:GetService("VirtualInputManager")
 
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Ken V8",
-   LoadingTitle = "Loading V8...",
-   LoadingSubtitle = "Smooth Flight & Damage Trigger",
+   Name = "Auto Ken V9",
+   LoadingTitle = "Loading V9 True Flight...",
+   LoadingSubtitle = "Smooth Glide & Damage Trigger",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
 })
@@ -25,8 +25,10 @@ local Toggle = MainTab:CreateToggle({
            StatusLabel:Set("Status: Idle") 
            local char = game.Players.LocalPlayer.Character
            if char and char:FindFirstChild("HumanoidRootPart") then
-               if char.HumanoidRootPart:FindFirstChild("FlyBV") then char.HumanoidRootPart.FlyBV:Destroy() end
-               if char.HumanoidRootPart:FindFirstChild("HoverBP") then char.HumanoidRootPart.HoverBP:Destroy() end
+               local hrp = char.HumanoidRootPart
+               if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
+               if hrp:FindFirstChild("HoverBP") then hrp.HoverBP:Destroy() end
+               if hrp:FindFirstChild("FlyGyro") then hrp.FlyGyro:Destroy() end
            end
        end
    end,
@@ -104,11 +106,12 @@ local function clearMovement()
         local hrp = char.HumanoidRootPart
         if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
         if hrp:FindFirstChild("HoverBP") then hrp.HoverBP:Destroy() end
+        if hrp:FindFirstChild("FlyGyro") then hrp.FlyGyro:Destroy() end
     end
 end
 
--- Fly horizontally to the NPC
-local function flyToNPC(targetPos)
+-- Initialize the flight engine (BodyVelocity + BodyGyro)
+local function startFlightEngine()
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
     clearMovement()
@@ -116,7 +119,24 @@ local function flyToNPC(targetPos)
     local bv = Instance.new("BodyVelocity")
     bv.Name = "FlyBV"
     bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(0, 0, 0)
     bv.Parent = hrp
+    
+    local gyro = Instance.new("BodyGyro")
+    gyro.Name = "FlyGyro"
+    gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    gyro.P = 9e4
+    gyro.D = 500
+    gyro.CFrame = CFrame.new(0, 0, 0)
+    gyro.Parent = hrp
+end
+
+-- Fly horizontally to the NPC
+local function flyToNPC(targetPos)
+    startFlightEngine()
+    local char = game.Players.LocalPlayer.Character
+    local hrp = char.HumanoidRootPart
+    local bv = hrp:FindFirstChild("FlyBV")
     
     while getgenv().AutoKen do
         if not hrp or not hrp.Parent then break end
@@ -124,28 +144,26 @@ local function flyToNPC(targetPos)
         if dist < 5 then break end
         
         local dir = (Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z) - hrp.Position).Unit
-        bv.Velocity = dir * 50
+        bv.Velocity = dir * 50 -- Flight speed
         task.wait(0.1)
     end
-    bv:Destroy()
+    -- Stop horizontal movement
+    if bv then bv.Velocity = Vector3.new(0, 0, 0) end
 end
 
--- Fly straight UP using smooth BodyVelocity
+-- Fly straight UP smoothly
 local function flyUp(targetY)
+    startFlightEngine()
     local char = game.Players.LocalPlayer.Character
     local hrp = char.HumanoidRootPart
-    clearMovement()
+    local bv = hrp:FindFirstChild("FlyBV")
     
-    local bv = Instance.new("BodyVelocity")
-    bv.Name = "FlyBV"
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.new(0, 60, 0) -- Smooth upward speed
-    bv.Parent = hrp
+    bv.Velocity = Vector3.new(0, 60, 0) -- Smooth upward flight speed
     
     while getgenv().AutoKen and hrp.Position.Y < targetY do
         task.wait(0.1)
     end
-    bv:Destroy()
+    bv.Velocity = Vector3.new(0, 0, 0) -- Stop flying up
     
     -- Lock in place in the sky
     local bp = Instance.new("BodyPosition")
@@ -177,9 +195,8 @@ task.spawn(function()
         local waitThreshold = getgenv().DodgeThreshold or 3
         local flyHeight = getgenv().FlyHeight or 60
         
-        -- Damage trigger logic
+        -- Damage Trigger: If we are waiting and health drops, fly up!
         if waitingForDamage and humanoid.Health < lastHealth then
-            -- Took damage! Fly up.
             waitingForDamage = false
             state = "FLY_UP"
         end
@@ -214,7 +231,6 @@ task.spawn(function()
                     task.wait(0.1)
                 end
             else
-                -- Out of dodges, wait for damage before flying up
                 if not waitingForDamage then
                     StatusLabel:Set("Status: Out of dodges. Waiting for damage to fly up...")
                     waitingForDamage = true
@@ -222,7 +238,7 @@ task.spawn(function()
             end
             
         elseif state == "FLY_UP" then
-            StatusLabel:Set("Status: Took damage! Flying UP!")
+            StatusLabel:Set("Status: Took damage! Flying UP smoothly!")
             local targetY = hrp.Position.Y + flyHeight
             flyUp(targetY)
             if getgenv().AutoKen then
